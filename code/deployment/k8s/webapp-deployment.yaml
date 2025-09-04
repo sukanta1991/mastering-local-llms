@@ -1,0 +1,88 @@
+# Kubernetes deployment for web application
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama-webapp
+  labels:
+    app: ollama-webapp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ollama-webapp
+  template:
+    metadata:
+      labels:
+        app: ollama-webapp
+    spec:
+      containers:
+      - name: webapp
+        image: ollama-webapp:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: OLLAMA_HOST
+          value: "http://ollama-service:11434"
+        - name: FLASK_ENV
+          value: "production"
+        - name: WEB_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ollama-secrets
+              key: web-secret-key
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: uploads
+          mountPath: /app/uploads
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: uploads-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-webapp-service
+  labels:
+    app: ollama-webapp
+spec:
+  selector:
+    app: ollama-webapp
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 5000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uploads-pvc
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi

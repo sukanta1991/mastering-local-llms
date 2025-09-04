@@ -1,0 +1,59 @@
+# Multi-stage Dockerfile for API Server
+FROM python:3.11-slim as builder
+
+# Set working directory
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Production stage
+FROM python:3.11-slim
+
+# Create non-root user
+RUN groupadd -r apiuser && useradd -r -g apiuser apiuser
+
+# Set working directory
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /root/.local
+
+# Copy application code
+COPY chapter11_rest_api/ ./chapter11_rest_api/
+COPY chapter15_rag_implementation/ ./chapter15_rag_implementation/
+COPY chapter16_multimodal/ ./chapter16_multimodal/
+COPY .env.example .env
+
+# Create directories and set permissions
+RUN mkdir -p logs data && \
+    chown -R apiuser:apiuser /app
+
+# Switch to non-root user
+USER apiuser
+
+# Set PATH for local packages
+ENV PATH=/root/.local/bin:$PATH
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Start the API server
+CMD ["python", "chapter11_rest_api/flask_api_server.py"]

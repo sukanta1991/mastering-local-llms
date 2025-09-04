@@ -1,0 +1,64 @@
+# Ingress configuration for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ollama-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - ollama.yourdomain.com
+    secretName: ollama-tls
+  rules:
+  - host: ollama.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ollama-webapp-service
+            port:
+              number: 80
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: ollama-api-service
+            port:
+              number: 80
+      - path: /ollama
+        pathType: Prefix
+        backend:
+          service:
+            name: ollama-service
+            port:
+              number: 11434
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ollama-config
+data:
+  ollama_host: "http://ollama-service:11434"
+  log_level: "INFO"
+  max_tokens: "150"
+  temperature: "0.7"
+---
+# Secret for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ollama-secrets
+type: Opaque
+data:
+  web-secret-key: <base64-encoded-secret>
+  api-secret-key: <base64-encoded-secret>
+  database-url: <base64-encoded-db-url>
